@@ -26,6 +26,14 @@
     "video-generation"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/vicseeai/vicsee-mcp-server#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vicseeai/vicsee-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vicseeai/vicsee-mcp-server/issues"
+  },
   "engines": {
     "node": ">=18"
   },
