@@ -1,0 +1,41 @@
+{
+  "name": "@vicsee/mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for VicSee — generate, edit, and upscale AI video & images from any agent (Hermes, Claude, Cursor, OpenClaw).",
+  "type": "module",
+  "bin": {
+    "vicsee-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "vicsee",
+    "ai-image",
+    "ai-video",
+    "image-generation",
+    "video-generation"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
