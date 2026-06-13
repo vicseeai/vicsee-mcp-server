@@ -6,18 +6,62 @@
  * Auth: set VICSEE_API_KEY (get one at https://vicsee.com → Settings → API).
  */
 
+import { readFile } from 'node:fs/promises';
+import { extname } from 'node:path';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
 import { VicSeeClient, VicSeeError } from './vicsee-client.js';
 
+/**
+ * The VicSee API needs every image input as a PUBLIC https URL or an inline
+ * base64 data: URI — never a local filesystem path. Since this MCP server runs
+ * locally (stdio), it can read a local file the agent passes and inline it as a
+ * data: URI. http(s) URLs and existing data: URIs pass through untouched.
+ */
+const IMAGE_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.avif': 'image/avif',
+};
+
+async function resolveImageInput(value: string): Promise<string> {
+  if (/^(https?:\/\/|data:)/i.test(value)) return value;
+  // Anything else is treated as a local file path → read + base64-encode.
+  const ext = extname(value).toLowerCase();
+  const mime = IMAGE_MIME[ext];
+  if (!mime) {
+    throw new VicSeeError(
+      'UNSUPPORTED_LOCAL_FILE',
+      `Cannot inline local file "${value}". Supported local image types: ${Object.keys(IMAGE_MIME).join(', ')}. For video/audio inputs, pass a public https URL.`,
+      400,
+    );
+  }
+  let bytes: Buffer;
+  try {
+    bytes = await readFile(value);
+  } catch {
+    throw new VicSeeError('FILE_NOT_FOUND', `Could not read local file "${value}".`, 400);
+  }
+  return `data:${mime};base64,${bytes.toString('base64')}`;
+}
+
+async function resolveImageInputs(arr?: string[]): Promise<string[] | undefined> {
+  if (!Array.isArray(arr) || arr.length === 0) return arr;
+  return Promise.all(arr.map(resolveImageInput));
+}
+
 const client = new VicSeeClient({
   apiKey: process.env.VICSEE_API_KEY,
   baseUrl: process.env.VICSEE_BASE_URL,
 });
 
-const server = new McpServer({ name: 'vicsee', version: '0.1.0' });
+const server = new McpServer({ name: 'vicsee', version: '0.2.0' });
 
 /** Wrap a handler: return pretty JSON on success, a clear error message on failure. */
 function tool(run: () => Promise<unknown>) {
@@ -63,11 +107,14 @@ server.registerTool(
   {
     title: 'Generate image or video',
     description:
-      'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source URLs in `image_urls`.',
+      'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-0-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … IMAGE inputs (image_urls, reference_image_urls) may be a public https URL, a LOCAL FILE PATH (this server reads and base64-encodes it for you), or a base64 data URI. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs.',
     inputSchema: {
       model: z.string().describe('Model id from vicsee_list_models, e.g. "nano-banana-pro-text-to-image" or "seedance-2-0-text-to-video"'),
       prompt: z.string().optional().describe('Text prompt (required for most models)'),
-      image_urls: z.array(z.string()).optional().describe('Source image URL(s) for image-to-video / image-to-image'),
+      image_urls: z.array(z.string()).optional().describe('Source image(s) for image-to-video / image-to-image. Each may be a public https URL, a local file path (auto base64-encoded by this server), or a base64 data URI.'),
+      reference_image_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 7 reference images. Each may be a public https URL, a local file path (auto base64-encoded), or a base64 data URI. Refer to them in the prompt as @Image1, @Image2, …'),
+      reference_video_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 3 public https video URLs (2-15s each, ≤15s total).'),
+      reference_audio_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 3 public https audio URLs.'),
       duration: z.number().optional().describe('Video length in seconds (e.g. 5, 6, 10, 15) — video models only'),
       aspect_ratio: z.string().optional().describe('e.g. "16:9", "9:16", "1:1", "landscape", "portrait"'),
       resolution: z.string().optional().describe('e.g. "1K", "2K", "4K", "720P", "1080P"'),
@@ -79,13 +126,18 @@ server.registerTool(
         .describe('Any additional model-specific params (see the model\'s options from vicsee_list_models)'),
     },
   },
-  ({ model, extra, ...rest }) => {
-    const input: Record<string, unknown> = { ...(extra ?? {}) };
-    for (const [k, v] of Object.entries(rest)) {
-      if (v !== undefined) input[k] = v;
-    }
-    return tool(() => client.generate({ model, input }));
-  },
+  ({ model, extra, ...rest }) =>
+    tool(async () => {
+      // Inline any local image file paths the agent passed (image_urls /
+      // reference_image_urls) as base64 data: URIs before sending to the API.
+      rest.image_urls = await resolveImageInputs(rest.image_urls);
+      rest.reference_image_urls = await resolveImageInputs(rest.reference_image_urls);
+      const input: Record<string, unknown> = { ...(extra ?? {}) };
+      for (const [k, v] of Object.entries(rest)) {
+        if (v !== undefined) input[k] = v;
+      }
+      return client.generate({ model, input });
+    }),
 );
 
 // ---------------------------------------------------------------------------
