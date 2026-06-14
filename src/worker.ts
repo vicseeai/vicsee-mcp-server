@@ -69,7 +69,8 @@ export default {
     }
 
     // First path segment is the opaque connector token: mcp.vicsee.com/<token>[/...]
-    const token = new URL(request.url).pathname.split('/').filter(Boolean)[0];
+    const url = new URL(request.url);
+    const token = url.pathname.split('/').filter(Boolean)[0];
     if (!token) return new Response('Missing connector token', { status: 404 });
 
     const apiKey = await resolveApiKey(token, env);
@@ -79,6 +80,9 @@ export default {
     const server = new McpServer({ name: 'vicsee', version: '0.4.0' });
     registerCoreTools(server, new VicSeeClient({ apiKey }), {}); // URL-in only (no local-file resolver)
 
-    return createMcpHandler(server)(request, env, ctx);
+    // The token lives in the path, so the MCP endpoint route IS this request's
+    // pathname (createMcpHandler defaults to "/mcp" and 404s otherwise). Setting
+    // route to url.pathname matches whatever path claude.ai posts to.
+    return createMcpHandler(server, { route: url.pathname })(request, env, ctx);
   },
 };

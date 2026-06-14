@@ -5,13 +5,16 @@
 
 name = "vicsee-mcp-connector"
 main = "src/worker.ts"
+account_id = "4d55e28ca06946c51ed53df2950ed73b"
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Custom domain — wrangler provisions DNS + cert (vicsee.com zone is on this account).
+routes = [{ pattern = "mcp.vicsee.com", custom_domain = true }]
+
 # Token → api_key cache (system of record is vicsee.connector_token in Postgres).
-# Replace id after: wrangler kv namespace create TOKEN_CACHE
 kv_namespaces = [
-  { binding = "TOKEN_CACHE", id = "REPLACE_IN_PART_C" }
+  { binding = "TOKEN_CACHE", id = "688ae61598dd4546951c797a8ef11638" }
 ]
 
 [vars]
