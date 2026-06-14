@@ -1,6 +1,6 @@
 {
   "name": "@vicsee/mcp-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server for VicSee — generate, edit, and upscale AI video & images from any agent (Hermes, Claude, Cursor, OpenClaw).",
   "type": "module",
   "bin": {

@@ -122,4 +122,15 @@ export class VicSeeClient {
   upscaleImage(body: { image_url: string; upscale_factor?: string }) {
     return this.request('POST', '/tools/upscale-image', { body });
   }
+
+  /** POST /upload — get a short-lived presigned R2 upload URL for a local file.
+   *  Returns { uploadUrl, publicUrl, key, expiresAt }. The caller PUTs the bytes
+   *  to uploadUrl, then uses publicUrl as an input for /generate. */
+  uploadSign(body: { contentType: string; sizeBytes?: number }) {
+    return this.request<{ uploadUrl: string; publicUrl: string; key: string; expiresAt?: string }>(
+      'POST',
+      '/upload',
+      { body },
+    );
+  }
 }

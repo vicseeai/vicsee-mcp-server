@@ -56,12 +56,39 @@ async function resolveImageInputs(arr?: string[]): Promise<string[] | undefined>
   return Promise.all(arr.map(resolveImageInput));
 }
 
+/**
+ * vicsee_upload: local file extension → MIME + kind. Used to host a local file
+ * at a public cdn.vicsee.com URL (the robust path for reference-to-video, where
+ * inline base64 truncates in tool-call output). MIME values must match the
+ * server's /api/v1/upload allowlist.
+ */
+const UPLOAD_MIME: Record<string, { contentType: string; kind: 'image' | 'video' | 'audio' }> = {
+  '.jpg': { contentType: 'image/jpeg', kind: 'image' },
+  '.jpeg': { contentType: 'image/jpeg', kind: 'image' },
+  '.png': { contentType: 'image/png', kind: 'image' },
+  '.webp': { contentType: 'image/webp', kind: 'image' },
+  '.gif': { contentType: 'image/gif', kind: 'image' },
+  '.avif': { contentType: 'image/avif', kind: 'image' },
+  '.heic': { contentType: 'image/heic', kind: 'image' },
+  '.heif': { contentType: 'image/heif', kind: 'image' },
+  '.mp4': { contentType: 'video/mp4', kind: 'video' },
+  '.mov': { contentType: 'video/quicktime', kind: 'video' },
+  '.webm': { contentType: 'video/webm', kind: 'video' },
+  '.mp3': { contentType: 'audio/mpeg', kind: 'audio' },
+  '.wav': { contentType: 'audio/wav', kind: 'audio' },
+};
+const UPLOAD_SIZE_CAP: Record<'image' | 'video' | 'audio', number> = {
+  image: 20 * 1024 * 1024,
+  video: 100 * 1024 * 1024,
+  audio: 20 * 1024 * 1024,
+};
+
 const client = new VicSeeClient({
   apiKey: process.env.VICSEE_API_KEY,
   baseUrl: process.env.VICSEE_BASE_URL,
 });
 
-const server = new McpServer({ name: 'vicsee', version: '0.2.0' });
+const server = new McpServer({ name: 'vicsee', version: '0.3.0' });
 
 /** Wrap a handler: return pretty JSON on success, a clear error message on failure. */
 function tool(run: () => Promise<unknown>) {
@@ -201,6 +228,68 @@ server.registerTool(
     inputSchema: {},
   },
   () => tool(() => client.getCredits()),
+);
+
+// ---------------------------------------------------------------------------
+// vicsee_upload — host a LOCAL file at a public URL (for use as a generate input)
+// ---------------------------------------------------------------------------
+server.registerTool(
+  'vicsee_upload',
+  {
+    title: 'Upload a local file',
+    description:
+      'Upload a LOCAL file (image, video, or audio) from this machine and get back a public https URL. Use the returned url as an input for vicsee_generate — e.g. drop it into reference_image_urls for a reference-to-video storyboard, or image_urls for image-to-video. PREFER this over inline base64 for references: large base64 strings get truncated in tool-call output and the model rejects them. The file uploads directly to storage; only its public URL comes back.',
+    inputSchema: {
+      file_path: z
+        .string()
+        .describe('Absolute path to a local file (image/video/audio) on this machine.'),
+    },
+  },
+  ({ file_path }) =>
+    tool(async () => {
+      const ext = extname(file_path).toLowerCase();
+      const meta = UPLOAD_MIME[ext];
+      if (!meta) {
+        throw new VicSeeError(
+          'UNSUPPORTED_FILE',
+          `Cannot upload "${file_path}". Supported types: ${Object.keys(UPLOAD_MIME).join(', ')}.`,
+          400,
+        );
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await readFile(file_path);
+      } catch {
+        throw new VicSeeError('FILE_NOT_FOUND', `Could not read local file "${file_path}".`, 400);
+      }
+      const sizeBytes = bytes.byteLength;
+      const cap = UPLOAD_SIZE_CAP[meta.kind];
+      if (sizeBytes > cap) {
+        throw new VicSeeError(
+          'FILE_TOO_LARGE',
+          `File is ${(sizeBytes / 1024 / 1024).toFixed(1)} MB; max for ${meta.kind} is ${cap / 1024 / 1024} MB.`,
+          400,
+        );
+      }
+      // 1. Ask VicSee to sign a presigned upload.
+      const sign = await client.uploadSign({ contentType: meta.contentType, sizeBytes });
+      // 2. PUT the bytes DIRECT to storage (presigned URL — no baseUrl, no auth header).
+      let put: Response;
+      try {
+        put = await fetch(sign.uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': meta.contentType },
+          body: new Uint8Array(bytes),
+        });
+      } catch (err) {
+        throw new VicSeeError('UPLOAD_FAILED', `Upload PUT failed: ${(err as Error).message}`, 0);
+      }
+      if (!put.ok) {
+        throw new VicSeeError('UPLOAD_FAILED', `Upload PUT rejected: HTTP ${put.status}`, put.status);
+      }
+      // 3. Hand back the public URL for the agent to use as a generate input.
+      return { url: sign.publicUrl, expires_at: sign.expiresAt };
+    }),
 );
 
 // ---------------------------------------------------------------------------
