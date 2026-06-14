@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"],
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["src/worker.ts", "src/tools-core.ts", "src/vicsee-client.ts"],
+  "exclude": ["node_modules", "dist"]
+}
