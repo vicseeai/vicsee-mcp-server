@@ -45,6 +45,34 @@ export function tool(run: () => Promise<unknown>) {
   })();
 }
 
+/** Inputs the upstream API can fetch on its own: a public http(s) URL or an inline data: URI. */
+const isFetchableInput = (v: string): boolean => /^(https?:\/\/|data:)/i.test(v);
+
+/**
+ * Worker-only guard. The hosted connector can't read the user's filesystem, so every
+ * image input must already be a public URL or a data: URI. Reject local-looking paths
+ * up front with an actionable error — otherwise they're forwarded as unfetchable
+ * "URLs" and fail before a task is even created, which (after a few in a row) trips
+ * the MCP client's "server unreachable" circuit breaker and looks like an outage.
+ */
+function assertHostedImageInputs(rest: {
+  image_urls?: string[];
+  reference_image_urls?: string[];
+}) {
+  for (const field of ['image_urls', 'reference_image_urls'] as const) {
+    const arr = rest[field];
+    if (!Array.isArray(arr)) continue;
+    const bad = arr.filter((v) => !isFetchableInput(v));
+    if (bad.length) {
+      throw new VicSeeError(
+        'LOCAL_FILE_UNSUPPORTED',
+        `${field} must be public https URLs or base64 data: URIs — this hosted connector can't read local files. Got: ${bad.join(', ')}. Host the image at a public URL (one that opens with no login), or use the @vicsee/mcp-server npm package, which uploads local files for you.`,
+        400,
+      );
+    }
+  }
+}
+
 /**
  * Register the 6 shared URL-in tools on a server bound to a given client.
  * Call once per server instance (stdio: once at startup; Worker: once per request).
@@ -54,6 +82,13 @@ export function registerCoreTools(
   client: VicSeeClient,
   opts: CoreToolOpts = {},
 ) {
+  // Local-file inlining only exists on stdio (opts.resolveImages). On the hosted
+  // Worker, image inputs must already be public URLs / data: URIs — reflect that in
+  // the tool descriptions so agents don't try (and silently fail with) local paths.
+  const localFiles = !!opts.resolveImages;
+  const imageSourceHelp = localFiles
+    ? 'a public https URL, a local file path (this server reads and base64-encodes it for you), or a base64 data URI'
+    : "a public https URL or a base64 data URI (this hosted connector can't read local files — host the image at a public URL, or use the @vicsee/mcp-server npm package, which uploads local files for you)";
   // -------------------------------------------------------------------------
   // vicsee_list_models — discover what's available (public, no key needed)
   // -------------------------------------------------------------------------
@@ -82,12 +117,14 @@ export function registerCoreTools(
     {
       title: 'Generate image or video',
       description:
-        'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-0-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … IMAGE inputs (image_urls, reference_image_urls) may be a public https URL, a LOCAL FILE PATH (this server reads and base64-encodes it for you), or a base64 data URI. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs.',
+        'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-0-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … IMAGE inputs (image_urls, reference_image_urls) may be ' +
+        imageSourceHelp +
+        '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs.',
       inputSchema: {
         model: z.string().describe('Model id from vicsee_list_models, e.g. "nano-banana-pro-text-to-image" or "seedance-2-0-text-to-video"'),
         prompt: z.string().optional().describe('Text prompt (required for most models)'),
-        image_urls: z.array(z.string()).optional().describe('Source image(s) for image-to-video / image-to-image. Each may be a public https URL, a local file path (auto base64-encoded by this server), or a base64 data URI.'),
-        reference_image_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 7 reference images. Each may be a public https URL, a local file path (auto base64-encoded), or a base64 data URI. Refer to them in the prompt as @Image1, @Image2, …'),
+        image_urls: z.array(z.string()).optional().describe(`Source image(s) for image-to-video / image-to-image. Each may be ${imageSourceHelp}.`),
+        reference_image_urls: z.array(z.string()).optional().describe(`Reference-to-video only: up to 7 reference images. Each may be ${imageSourceHelp}. Refer to them in the prompt as @Image1, @Image2, …`),
         reference_video_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 3 public https video URLs (2-15s each, ≤15s total).'),
         reference_audio_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 3 public https audio URLs.'),
         duration: z.number().optional().describe('Video length in seconds (e.g. 5, 6, 10, 15) — video models only'),
@@ -105,10 +142,13 @@ export function registerCoreTools(
     ({ model, extra, ...rest }) =>
       tool(async () => {
         // stdio: inline any local image file paths as base64 data: URIs.
-        // Worker: opts.resolveImages is undefined → inputs pass through (URL-in only).
+        // Worker: opts.resolveImages is undefined → reject local paths early with a
+        // clear error (URL-in only), instead of forwarding an unfetchable path.
         if (opts.resolveImages) {
           rest.image_urls = await opts.resolveImages(rest.image_urls);
           rest.reference_image_urls = await opts.resolveImages(rest.reference_image_urls);
+        } else {
+          assertHostedImageInputs(rest);
         }
         const input: Record<string, unknown> = { ...(extra ?? {}) };
         for (const [k, v] of Object.entries(rest)) {
