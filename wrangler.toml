@@ -19,7 +19,7 @@ routes = [{ pattern = "mcp.vicsee.com", custom_domain = true }]
 # grants, and dynamically-registered (DCR) clients. Create at Part C:
 #   wrangler kv namespace create OAUTH_KV   (then paste the id here)
 kv_namespaces = [
-  { binding = "OAUTH_KV", id = "REPLACE_WITH_OAUTH_KV_ID" }
+  { binding = "OAUTH_KV", id = "02b6d88918de4e3dba324366f27b21aa" }
 ]
 
 [vars]
