@@ -69,6 +69,7 @@ export function registerCoreTools(
           .optional()
           .describe('Filter by media type'),
       },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     ({ type }) => tool(() => client.listModels(type)),
   );
@@ -99,6 +100,7 @@ export function registerCoreTools(
           .optional()
           .describe('Any additional model-specific params (see the model\'s options from vicsee_list_models)'),
       },
+      annotations: { readOnlyHint: false, openWorldHint: true },
     },
     ({ model, extra, ...rest }) =>
       tool(async () => {
@@ -128,6 +130,7 @@ export function registerCoreTools(
       inputSchema: {
         task_id: z.string().describe('The task id returned by vicsee_generate / vicsee_upscale_*'),
       },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     ({ task_id }) => tool(() => client.getTask(task_id)),
   );
@@ -145,6 +148,7 @@ export function registerCoreTools(
         image_url: z.string().describe('Publicly accessible image URL'),
         upscale_factor: z.enum(['1', '2', '4', '8']).optional().describe('Upscale factor (default "2")'),
       },
+      annotations: { readOnlyHint: false, openWorldHint: true },
     },
     ({ image_url, upscale_factor }) => tool(() => client.upscaleImage({ image_url, upscale_factor })),
   );
@@ -162,6 +166,7 @@ export function registerCoreTools(
         video_url: z.string().describe('Publicly accessible video URL'),
         upscale_factor: z.enum(['1', '2', '4']).optional().describe('Upscale factor (default "2")'),
       },
+      annotations: { readOnlyHint: false, openWorldHint: true },
     },
     ({ video_url, upscale_factor }) => tool(() => client.upscaleVideo({ video_url, upscale_factor })),
   );
@@ -175,6 +180,7 @@ export function registerCoreTools(
       title: 'Get credit balance',
       description: 'Get the current VicSee credit balance for the configured API key.',
       inputSchema: {},
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
     () => tool(() => client.getCredits()),
   );
