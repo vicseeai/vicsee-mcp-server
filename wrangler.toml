@@ -1,7 +1,9 @@
-# Hosted VicSee MCP connector — Cloudflare Worker (#231)
-# Deploy: npm run deploy  (after `wrangler kv namespace create TOKEN_CACHE`
-# and `wrangler secret put MCP_RESOLVE_SECRET`). Custom domain mcp.vicsee.com
-# is added in Part C. The stdio npm package (src/index.ts) is unaffected.
+# Hosted VicSee MCP connector — Cloudflare Worker (#231 Phase 2: OAuth).
+# Deploy (Part C): 1) wrangler kv namespace create OAUTH_KV  → paste id below
+#                  2) wrangler secret put MCP_CONNECT_SIGNING_SECRET  (match vicsee-v2)
+#                  3) npm run deploy
+# Custom domain mcp.vicsee.com is provisioned by wrangler. The stdio npm package
+# (src/index.ts) is unaffected. Replaces the v1 secret-URL transport (#231 P5).
 
 name = "vicsee-mcp-connector"
 main = "src/worker.ts"
@@ -12,15 +14,16 @@ compatibility_flags = ["nodejs_compat"]
 # Custom domain — wrangler provisions DNS + cert (vicsee.com zone is on this account).
 routes = [{ pattern = "mcp.vicsee.com", custom_domain = true }]
 
-# Token → api_key cache (system of record is vicsee.connector_token in Postgres).
+# Required by @cloudflare/workers-oauth-provider — stores access/refresh tokens,
+# grants, and dynamically-registered (DCR) clients. Create at Part C:
+#   wrangler kv namespace create OAUTH_KV   (then paste the id here)
 kv_namespaces = [
-  { binding = "TOKEN_CACHE", id = "688ae61598dd4546951c797a8ef11638" }
+  { binding = "OAUTH_KV", id = "REPLACE_WITH_OAUTH_KV_ID" }
 ]
 
 [vars]
-VICSEE_RESOLVE_URL = "https://vicsee.com/api/v1/internal/mcp/resolve-token"
-# MCP_RESOLVE_SECRET is a SECRET — set via: wrangler secret put MCP_RESOLVE_SECRET
-# (do not put it here). Must match vicsee-v2's MCP_RESOLVE_SECRET.
-
-# Custom domain (Part C): route mcp.vicsee.com to this Worker via the Cloudflare
-# dashboard (Workers → Custom Domains) or a [[routes]] block once DNS is ready.
+# Where /authorize delegates login (Better Auth session + consent).
+VICSEE_CONSENT_URL = "https://vicsee.com/connect/authorize"
+# MCP_CONNECT_SIGNING_SECRET is a SECRET — set via:
+#   wrangler secret put MCP_CONNECT_SIGNING_SECRET
+# (do not put it here). Must match vicsee-v2's MCP_CONNECT_SIGNING_SECRET.
