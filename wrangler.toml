@@ -1,7 +1,8 @@
 # Hosted VicSee MCP connector — Cloudflare Worker (#231 Phase 2: OAuth).
 # Deploy (Part C): 1) wrangler kv namespace create OAUTH_KV  → paste id below
 #                  2) wrangler secret put MCP_CONNECT_SIGNING_SECRET  (match vicsee-v2)
-#                  3) npm run deploy
+#                  3) wrangler secret put MCP_RESOLVE_SECRET          (match vicsee-v2)
+#                  4) npm run deploy
 # Custom domain mcp.vicsee.com is provisioned by wrangler. The stdio npm package
 # (src/index.ts) is unaffected. Replaces the v1 secret-URL transport (#231 P5).
 
@@ -24,6 +25,8 @@ kv_namespaces = [
 [vars]
 # Where /authorize delegates login (Better Auth session + consent).
 VICSEE_CONSENT_URL = "https://vicsee.com/connect/authorize"
-# MCP_CONNECT_SIGNING_SECRET is a SECRET — set via:
-#   wrangler secret put MCP_CONNECT_SIGNING_SECRET
-# (do not put it here). Must match vicsee-v2's MCP_CONNECT_SIGNING_SECRET.
+# Server-to-server resolve of userId -> api_key (key never touches the browser).
+VICSEE_RESOLVE_USER_KEY_URL = "https://vicsee.com/api/v1/internal/mcp/resolve-user-key"
+# SECRETS — set via wrangler secret put (do not put here). Must match vicsee-v2:
+#   MCP_CONNECT_SIGNING_SECRET   (signs/verifies the consent handoff)
+#   MCP_RESOLVE_SECRET           (gates the resolve-user-key endpoint)

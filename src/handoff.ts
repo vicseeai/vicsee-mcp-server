@@ -2,14 +2,16 @@
  * Worker-side verify for the vicsee.com -> Worker OAuth consent handoff (#231 Phase 2).
  *
  * Mirrors vicsee-v2's src/shared/lib/connector-handoff.ts (which SIGNS with Node
- * crypto) using Web Crypto, so the Worker can VERIFY the `{ userId, apiKey, wreq, exp }`
- * blob vicsee.com hands back after the user approves consent. HMAC-SHA256 over the
- * same base64url `data` string with the same shared secret (MCP_CONNECT_SIGNING_SECRET).
+ * crypto) using Web Crypto, so the Worker can VERIFY the `{ userId, wreq, exp }` blob
+ * vicsee.com hands back after the user approves consent. HMAC-SHA256 over the same
+ * base64url `data` string with the same shared secret (MCP_CONNECT_SIGNING_SECRET).
+ *
+ * SECURITY: the blob carries only the (non-secret) userId — the `sk-` key is resolved
+ * server-to-server in worker.ts, never via this browser-borne redirect.
  */
 
 export interface HandoffPayload {
   userId: string;
-  apiKey: string;
   /** Opaque Worker auth-request blob, round-tripped untouched. */
   wreq: string;
   /** Epoch ms expiry. */
@@ -65,7 +67,7 @@ export async function verifyHandoff(
       new TextDecoder().decode(base64urlToBytes(data))
     ) as HandoffPayload;
     if (!body.exp || Date.now() > body.exp) return null;
-    if (!body.userId || !body.apiKey) return null;
+    if (!body.userId || !body.wreq) return null;
     return body;
   } catch {
     return null;

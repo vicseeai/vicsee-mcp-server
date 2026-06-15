@@ -39,6 +39,10 @@ interface Env {
   MCP_CONNECT_SIGNING_SECRET: string;
   /** Where /authorize delegates login: https://vicsee.com/connect/authorize */
   VICSEE_CONSENT_URL: string;
+  /** vicsee-v2 endpoint resolving userId -> api_key, e.g. https://vicsee.com/api/v1/internal/mcp/resolve-user-key */
+  VICSEE_RESOLVE_USER_KEY_URL: string;
+  /** Shared secret for the resolve endpoint (matches vicsee-v2 MCP_RESOLVE_SECRET). */
+  MCP_RESOLVE_SECRET: string;
 }
 
 interface GrantProps {
@@ -51,6 +55,24 @@ const encodeWreq = (r: AuthRequest): string =>
   btoa(unescape(encodeURIComponent(JSON.stringify(r))));
 const decodeWreq = (s: string): AuthRequest =>
   JSON.parse(decodeURIComponent(escape(atob(s)))) as AuthRequest;
+
+/**
+ * Resolve userId -> the user's connector api_key over a secret-gated server-to-server
+ * call (the key is never carried in the browser redirect). Returns null on failure.
+ */
+async function resolveUserKey(userId: string, env: Env): Promise<string | null> {
+  const res = await fetch(env.VICSEE_RESOLVE_USER_KEY_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${env.MCP_RESOLVE_SECRET}`,
+    },
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { data?: { api_key?: string } };
+  return body?.data?.api_key ?? null;
+}
 
 /**
  * MCP API handler — runs AFTER OAuth validates the bearer token. The grant's props
@@ -92,6 +114,13 @@ const defaultHandler = {
       if (denied) {
         if (!wreqRaw) return new Response(denied, { status: 400 });
         const r = decodeWreq(wreqRaw);
+        // `wreq` is unsigned + attacker-forgeable, so NEVER redirect to its
+        // redirectUri blindly (open-redirect). Validate against the registered
+        // DCR client first — same guarantee the success path gets from the lib.
+        const client = await provider.lookupClient(r.clientId);
+        if (!client || !client.redirectUris?.includes(r.redirectUri)) {
+          return new Response('Invalid redirect_uri', { status: 400 });
+        }
         const back = new URL(r.redirectUri);
         back.searchParams.set('error', denied);
         if (r.state) back.searchParams.set('state', r.state);
@@ -104,8 +133,12 @@ const defaultHandler = {
       const payload = await verifyHandoff(h, env.MCP_CONNECT_SIGNING_SECRET);
       if (!payload) return new Response('Invalid or expired handoff', { status: 401 });
 
+      // Resolve the api_key server-to-server — it is never carried in the browser URL.
+      const apiKey = await resolveUserKey(payload.userId, env);
+      if (!apiKey) return new Response('Could not resolve account', { status: 502 });
+
       const oauthReq = decodeWreq(payload.wreq);
-      const props: GrantProps = { userId: payload.userId, apiKey: payload.apiKey };
+      const props: GrantProps = { userId: payload.userId, apiKey };
       const { redirectTo } = await provider.completeAuthorization({
         request: oauthReq,
         userId: payload.userId,
