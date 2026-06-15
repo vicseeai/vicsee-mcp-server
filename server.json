@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vicseeai/vicsee-mcp-server",
+  "description": "MCP server for VicSee — generate, edit, and upscale AI video \u0026 images from any agent (Hermes, Claude, Cursor, OpenClaw).",
+  "repository": {
+    "url": "https://github.com/vicseeai/vicsee-mcp-server",
+    "source": "github"
+  },
+  "version": "0.3.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@vicsee/mcp-server",
+      "version": "0.3.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "VicSee API key (starts with sk-) from vicsee.com → Settings → API. Requires a paid plan or credit pack.",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "VICSEE_API_KEY"
+        }
+      ]
+    }
+  ]
+}
