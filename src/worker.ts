@@ -86,7 +86,14 @@ const apiHandler = {
 
     const server = new McpServer({ name: 'vicsee', version: '0.5.0' });
     registerCoreTools(server, new VicSeeClient({ apiKey }), {}); // URL-in only
-    return createMcpHandler(server, { route: '/mcp' })(request, env, ctx);
+    // MCP is served at BOTH the bare root and /mcp (see apiRoute below). Use the
+    // actual request path so the handler matches whichever the client connected to
+    // — claude.ai posts to the exact URL the user pasted (bare domain or /mcp).
+    return createMcpHandler(server, { route: new URL(request.url).pathname })(
+      request,
+      env,
+      ctx
+    );
   },
 };
 
@@ -100,7 +107,12 @@ const defaultHandler = {
     const url = new URL(request.url);
 
     if (url.pathname === '/authorize') {
-      const oauthReq = await provider.parseAuthRequest(request);
+      let oauthReq: AuthRequest;
+      try {
+        oauthReq = await provider.parseAuthRequest(request);
+      } catch {
+        return new Response('Invalid authorization request', { status: 400 });
+      }
       const to = new URL(env.VICSEE_CONSENT_URL);
       to.searchParams.set('wreq', encodeWreq(oauthReq));
       return Response.redirect(to.toString(), 302);
@@ -154,7 +166,11 @@ const defaultHandler = {
 };
 
 export default new OAuthProvider({
-  apiRoute: '/mcp',
+  // Serve MCP at BOTH the bare root and /mcp so users can paste either
+  // `https://mcp.vicsee.com` or `https://mcp.vicsee.com/mcp`. The library
+  // special-cases `'/'` to match the EXACT root only (not a prefix), so
+  // /authorize and /callback still fall through to defaultHandler — no collision.
+  apiRoute: ['/mcp', '/'],
   apiHandler,
   defaultHandler,
   authorizeEndpoint: '/authorize',
