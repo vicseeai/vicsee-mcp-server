@@ -119,7 +119,7 @@ export function registerCoreTools(
       description:
         'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-0-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … IMAGE inputs (image_urls, reference_image_urls) may be ' +
         imageSourceHelp +
-        '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs.',
+        '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs. For video-edit models (e.g. "happyhorse-video-edit"), pass the source clip in video_url and optionally set audio_setting ("auto" or "origin").',
       inputSchema: {
         model: z.string().describe('Model id from vicsee_list_models, e.g. "nano-banana-pro-text-to-image" or "seedance-2-0-text-to-video"'),
         prompt: z.string().optional().describe('Text prompt (required for most models)'),
@@ -127,6 +127,8 @@ export function registerCoreTools(
         reference_image_urls: z.array(z.string()).optional().describe(`Reference-to-video only: up to 7 reference images. Each may be ${imageSourceHelp}. Refer to them in the prompt as @Image1, @Image2, …`),
         reference_video_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 3 public https video URLs (2-15s each, ≤15s total).'),
         reference_audio_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 3 public https audio URLs.'),
+        video_url: z.string().optional().describe('Video-edit models (e.g. "happyhorse-video-edit") only: one public https video URL, 3-15s, to edit.'),
+        audio_setting: z.string().optional().describe('Video-edit models only: "auto" (regenerate audio) or "origin" (keep the source audio).'),
         duration: z.number().optional().describe('Video length in seconds (e.g. 5, 6, 10, 15) — video models only'),
         aspect_ratio: z.string().optional().describe('e.g. "16:9", "9:16", "1:1", "landscape", "portrait"'),
         resolution: z.string().optional().describe('e.g. "1K", "2K", "4K", "720P", "1080P"'),
