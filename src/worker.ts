@@ -75,6 +75,27 @@ async function resolveUserKey(userId: string, env: Env): Promise<string | null> 
 }
 
 /**
+ * Build the MCP server for a resolved api_key and serve it over Streamable HTTP.
+ * MCP is served at BOTH the bare root and /mcp (see apiRoute below); use the actual
+ * request path so the handler matches whichever the client connected to — claude.ai
+ * (and Codex, etc.) post to the exact URL the user pasted (bare domain or /mcp).
+ */
+function serveMcp(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  apiKey: string
+): Response | Promise<Response> {
+  const server = new McpServer({ name: 'vicsee', version: '0.6.0' });
+  registerCoreTools(server, new VicSeeClient({ apiKey }), {}); // URL-in only
+  return createMcpHandler(server, { route: new URL(request.url).pathname })(
+    request,
+    env,
+    ctx
+  );
+}
+
+/**
  * MCP API handler — runs AFTER OAuth validates the bearer token. The grant's props
  * (set at completeAuthorization) arrive on ctx.props; build the client per request.
  */
@@ -83,17 +104,7 @@ const apiHandler = {
     const props = (ctx as ExecutionContext & { props?: GrantProps }).props;
     const apiKey = props?.apiKey;
     if (!apiKey) return new Response('Unauthorized', { status: 401 });
-
-    const server = new McpServer({ name: 'vicsee', version: '0.5.0' });
-    registerCoreTools(server, new VicSeeClient({ apiKey }), {}); // URL-in only
-    // MCP is served at BOTH the bare root and /mcp (see apiRoute below). Use the
-    // actual request path so the handler matches whichever the client connected to
-    // — claude.ai posts to the exact URL the user pasted (bare domain or /mcp).
-    return createMcpHandler(server, { route: new URL(request.url).pathname })(
-      request,
-      env,
-      ctx
-    );
+    return serveMcp(request, env, ctx, apiKey);
   },
 };
 
@@ -165,7 +176,7 @@ const defaultHandler = {
   },
 };
 
-export default new OAuthProvider({
+const oauth = new OAuthProvider({
   // Serve MCP at BOTH the bare root and /mcp so users can paste either
   // `https://mcp.vicsee.com` or `https://mcp.vicsee.com/mcp`. The library
   // special-cases `'/'` to match the EXACT root only (not a prefix), so
@@ -177,3 +188,27 @@ export default new OAuthProvider({
   tokenEndpoint: '/token',
   clientRegistrationEndpoint: '/register',
 });
+
+/**
+ * Dual-auth front door. Claude runs the OAuth dance, but non-Claude clients (Codex,
+ * Cursor, raw HTTP) can only send a static `Authorization: Bearer <token>` — the
+ * industry-standard remote-MCP + bearer pattern. We let those connect to the SAME URL
+ * with a VicSee `sk-...` API key: intercept it on the MCP routes and serve directly,
+ * authenticating tool calls against /api/v1 exactly like the stdio package does.
+ *
+ * Everything else falls through to OAuthProvider unchanged — OAuth access tokens (which
+ * are never `sk-`-prefixed, so they can't collide), plus /authorize, /callback, /token,
+ * and /register. The Claude flow is byte-for-byte untouched.
+ */
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const { pathname } = new URL(request.url);
+    if (pathname === '/mcp' || pathname === '/') {
+      const m = (request.headers.get('authorization') ?? '').match(
+        /^Bearer\s+(sk-\S+?)\s*$/i
+      );
+      if (m) return serveMcp(request, env, ctx, m[1]);
+    }
+    return oauth.fetch(request, env, ctx);
+  },
+};
