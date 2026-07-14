@@ -119,7 +119,7 @@ export function registerCoreTools(
       description:
         'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-0-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … IMAGE inputs (image_urls, reference_image_urls) may be ' +
         imageSourceHelp +
-        '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs. For video-edit models (e.g. "happyhorse-video-edit"), pass the source clip in video_url and optionally set audio_setting ("auto" or "origin").',
+        '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs. For video-edit models (e.g. "happyhorse-video-edit"), pass the source clip in video_url and optionally set audio_setting ("auto" or "origin"). Input images must have an aspect ratio between 0.4 and 2.5 (width÷height) and at most 36MP — wide-strip composites (e.g. 3:1) are rejected; use a 2×2 grid layout instead. On "failed" tasks, read error.key and error.message from vicsee_get_task — they state the actual reason (do not guess).',
       inputSchema: {
         model: z.string().describe('Model id from vicsee_list_models, e.g. "nano-banana-pro-text-to-image" or "seedance-2-0-text-to-video"'),
         prompt: z.string().optional().describe('Text prompt (required for most models)'),
@@ -185,10 +185,10 @@ export function registerCoreTools(
     {
       title: 'Upscale an image',
       description:
-        'Upscale a publicly accessible image (JPEG/PNG/WebP). Asynchronous: returns a task id — poll vicsee_get_task until completed. upscale_factor defaults to "2".',
+        'Upscale a publicly accessible image (JPEG/PNG/WebP). Asynchronous: returns a task id — poll vicsee_get_task until completed. upscale_factor defaults to "2" (max "4"). Credits are tiered by OUTPUT size (input megapixels × factor²): ≤24MP = 20, ≤48MP = 40, ≤96MP = 80; outputs above 96MP are rejected.',
       inputSchema: {
         image_url: z.string().describe('Publicly accessible image URL'),
-        upscale_factor: z.enum(['1', '2', '4', '8']).optional().describe('Upscale factor (default "2")'),
+        upscale_factor: z.enum(['1', '2', '4']).optional().describe('Upscale factor (default "2"; 8x is not supported)'),
       },
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
