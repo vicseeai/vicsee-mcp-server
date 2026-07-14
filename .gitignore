@@ -4,3 +4,9 @@ dist/
 *.log
 .DS_Store
 package-lock.json
+
+# npm auth (token comes from NPM_TOKEN env var)
+.npmrc
+
+# wrangler local state
+.wrangler/
