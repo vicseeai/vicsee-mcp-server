@@ -134,6 +134,12 @@ export function registerCoreTools(
         resolution: z.string().optional().describe('e.g. "1K", "2K", "4K", "720P", "1080P"'),
         output_format: z.string().optional().describe('Image output format, e.g. "png" or "jpeg"'),
         audio: z.boolean().optional().describe('Enable native audio (supported video models)'),
+        nsfw_checker: z
+          .boolean()
+          .optional()
+          .describe(
+            'Seedance 2 only. Set false to relax the provider content/audio sensitivity filter (helps when benign dialogue/SFX is wrongly flagged). Honored ONLY for approved partner accounts; ignored otherwise. Model-level safety always applies.'
+          ),
         extra: z
           .record(z.unknown())
           .optional()
