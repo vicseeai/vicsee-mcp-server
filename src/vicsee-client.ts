@@ -7,9 +7,19 @@
 
 const DEFAULT_BASE_URL = 'https://vicsee.com/api/v1';
 
+/** Kept in sync with package.json by hand — the worker build cannot import JSON. */
+const PACKAGE_VERSION = '0.3.4';
+
 export interface VicSeeConfig {
   apiKey?: string;
   baseUrl?: string;
+  /**
+   * How this client is being run: 'stdio' for the npm package, 'worker' for the
+   * hosted connector at mcp.vicsee.com. Sent as part of the User-Agent so VicSee can
+   * tell hosted-MCP from npm-MCP from raw REST — three call paths that are otherwise
+   * indistinguishable server-side (every one of them lands as source:'api').
+   */
+  transport?: 'stdio' | 'worker';
 }
 
 export class VicSeeError extends Error {
@@ -32,10 +42,12 @@ interface RequestOpts {
 export class VicSeeClient {
   private apiKey?: string;
   private baseUrl: string;
+  private userAgent: string;
 
   constructor(cfg: VicSeeConfig = {}) {
     this.apiKey = cfg.apiKey;
     this.baseUrl = (cfg.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.userAgent = `vicsee-mcp-server/${PACKAGE_VERSION} (${cfg.transport ?? 'stdio'})`;
   }
 
   private async request<T = any>(
@@ -59,7 +71,10 @@ export class VicSeeClient {
       }
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': this.userAgent,
+    };
     if (auth && this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;
 
     let res: Response;

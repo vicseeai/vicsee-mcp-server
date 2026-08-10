@@ -87,7 +87,7 @@ function serveMcp(
   apiKey: string
 ): Response | Promise<Response> {
   const server = new McpServer({ name: 'vicsee', version: '0.6.0' });
-  registerCoreTools(server, new VicSeeClient({ apiKey }), {}); // URL-in only
+  registerCoreTools(server, new VicSeeClient({ apiKey, transport: 'worker' }), {}); // URL-in only
   return createMcpHandler(server, { route: new URL(request.url).pathname })(
     request,
     env,
