@@ -66,7 +66,7 @@ Point your MCP client at the local build by using `"command": "node", "args": ["
 
 > "Make me a 5-second video of a kitten chasing a laser."
 
-1. `vicsee_list_models` (type: video) → pick e.g. `seedance-2-0-text-to-video`
+1. `vicsee_list_models` (type: video) → pick e.g. `seedance-2-5-text-to-video` (up to 30s) or `seedance-2-0-text-to-video` (adds 1080p/4K)
 2. `vicsee_generate` (model, prompt, duration: 5) → `{ id, status: "pending" }`
 3. `vicsee_get_task` (id) … poll … → `{ status: "completed", result: { url: "https://cdn.vicsee.com/…" } }`
 
