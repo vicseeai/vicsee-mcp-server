@@ -122,7 +122,7 @@ export function registerCoreTools(
         '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs. For video-edit models (e.g. "happyhorse-video-edit"), pass the source clip in video_url and optionally set audio_setting ("auto" or "origin"). Input images must have an aspect ratio between 0.4 and 2.5 (width÷height) and at most 36MP — wide-strip composites (e.g. 3:1) are rejected; use a 2×2 grid layout instead. On "failed" tasks, read error.key and error.message from vicsee_get_task — they state the actual reason (do not guess).',
       inputSchema: {
         model: z.string().describe('Model id from vicsee_list_models, e.g. "nano-banana-pro-text-to-image" or "seedance-2-5-text-to-video"'),
-        prompt: z.string().optional().describe('Text prompt (required for most models)'),
+        prompt: z.string().optional().describe('Text prompt (required for most models). Pass it here as a plain string — this server builds the correct request envelope for you, so you never need to decide between a top-level prompt and input.prompt.'),
         image_urls: z.array(z.string()).optional().describe(`Source image(s) for image-to-video / image-to-image. Each may be ${imageSourceHelp}.`),
         reference_image_urls: z.array(z.string()).optional().describe(`Reference-to-video only: up to 7 reference images. Each may be ${imageSourceHelp}. Refer to them in the prompt as @Image1, @Image2, …`),
         reference_video_urls: z.array(z.string()).optional().describe('Reference-to-video only: up to 3 public https video URLs (2-15s each, ≤15s total).'),
