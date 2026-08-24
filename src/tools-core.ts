@@ -131,7 +131,12 @@ export function registerCoreTools(
         audio_setting: z.string().optional().describe('Video-edit models only: "auto" (regenerate audio) or "origin" (keep the source audio).'),
         duration: z.number().optional().describe('Video length in seconds (e.g. 5, 6, 10, 15) — video models only'),
         aspect_ratio: z.string().optional().describe('e.g. "16:9", "9:16", "1:1", "landscape", "portrait"'),
-        resolution: z.string().optional().describe('e.g. "1K", "2K", "4K", "720P", "768P", "1080P" — valid values differ per model, see vicsee_list_models'),
+        // VicSee #296: this used to read `e.g. "1K", "2K", "4K", "720P", "768P", "1080P"`.
+        // The families share no enum, and "720P" sat one slot from "768P" — an agent picking
+        // the cheap MiniMax H3 tier from that menu could reasonably choose the one H3 rejects
+        // outright. One partner's agent did, three times, and the retries cost them 675 credits.
+        // Never list an example value that is fatal on some model.
+        resolution: z.string().optional().describe('Model-specific — call vicsee_list_models and use a value from that model\'s options.resolution. The families do NOT share an enum: minimax-h3-* accept ONLY "768P" or "2K" (no 720p, 1080p or 4K); seedance-* use lowercase "480p"/"720p"/"1080p"; image models use "1K"/"2K"/"4K". Omitting it takes that model\'s default, which on most video models is NOT the cheapest tier — send it explicitly.'),
         output_format: z.string().optional().describe('Image output format, e.g. "png" or "jpeg"'),
         audio: z.boolean().optional().describe('Enable native audio (supported video models). Not applicable to MiniMax H3, which always generates audio and has no toggle — the field is ignored there.'),
         nsfw_checker: z
