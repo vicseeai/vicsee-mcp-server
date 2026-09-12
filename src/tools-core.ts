@@ -179,7 +179,7 @@ export function registerCoreTools(
     {
       title: 'Get task status / result',
       description:
-        'Poll a generation or upscale task by its id. status is one of "pending" | "processing" | "queued" | "completed" | "failed". When "completed", the media URL is in result.url (videos/images) or result.songs (music). When "failed", details are in error. Poll every few seconds until completed or failed.',
+        'Poll a generation or upscale task by its id. IMPORTANT: finished media URLs are kept for 7 days only — result.expires_at is the exact time the URL stops working; download or re-host anything the user wants to keep. status is one of "pending" | "processing" | "queued" | "completed" | "failed". When "completed", the media URL is in result.url (videos/images) or result.songs (music). When "failed", details are in error. Poll every few seconds until completed or failed.',
       inputSchema: {
         task_id: z.string().describe('The task id returned by vicsee_generate / vicsee_upscale_*'),
       },

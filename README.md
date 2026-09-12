@@ -11,7 +11,7 @@ Works with **Hermes Agent, Claude (Desktop / Code), Cursor, OpenClaw**, and any 
 |------|--------------|
 | `vicsee_list_models` | List available models (Seedance, Veo, Kling, FLUX, Nano Banana, …) + their credit costs |
 | `vicsee_generate` | Text/image → **video or image** with a chosen model |
-| `vicsee_get_task` | Poll a task and get the finished media URL |
+| `vicsee_get_task` | Poll a task and get the finished media URL (`result.expires_at` — URLs are kept 7 days; download what you want to keep) |
 | `vicsee_upscale_image` | Upscale an image |
 | `vicsee_upscale_video` | Upscale a video |
 | `vicsee_get_credits` | Check your credit balance |
