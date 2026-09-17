@@ -110,6 +110,44 @@ export function registerCoreTools(
   );
 
   // -------------------------------------------------------------------------
+  // vicsee_estimate — exact credit cost of a vicsee_generate call, without running it (#313)
+  // -------------------------------------------------------------------------
+  server.registerTool(
+    'vicsee_estimate',
+    {
+      title: 'Estimate credit cost (no charge)',
+      description:
+        'Return the EXACT credits a vicsee_generate call will charge, without generating anything. Takes the same arguments as vicsee_generate. The server runs the identical validation, model/resolution resolution and per-second billing (probing any reference video for its length) and stops before the charge, so `credits` is what vicsee_generate will deduct. Also returns `resolvedParams` (the settings that will actually apply, including defaults you did not send), `creditsRemaining` and `sufficient`. Call this before vicsee_generate whenever the user cares about cost, is comparing models, or is attaching a video reference (per-second billing across input + output). Invalid requests return the same error vicsee_generate would, so it also works as a free dry run.',
+      inputSchema: {
+        model: z.string().describe('Model id from vicsee_list_models — exactly what you will pass to vicsee_generate'),
+        prompt: z.string().optional().describe('The prompt you will send (required for most models)'),
+        image_urls: z.array(z.string()).optional().describe('As for vicsee_generate. Public https URLs (nothing is inlined for an estimate).'),
+        reference_image_urls: z.array(z.string()).optional().describe('As for vicsee_generate. Public https URLs.'),
+        reference_video_urls: z.array(z.string()).optional().describe('As for vicsee_generate. Include it: a video reference switches billing to per-second and the estimate probes the clip length.'),
+        reference_audio_urls: z.array(z.string()).optional().describe('As for vicsee_generate.'),
+        video_url: z.string().optional().describe('Video-edit models only, as for vicsee_generate.'),
+        audio_setting: z.string().optional().describe('Video-edit models only, as for vicsee_generate.'),
+        duration: z.number().optional().describe('Video length in seconds. Send it explicitly; the default is often not the cheapest tier.'),
+        aspect_ratio: z.string().optional().describe('As for vicsee_generate'),
+        resolution: z.string().optional().describe('As for vicsee_generate. Send it explicitly; the default on most video models is NOT the cheapest tier.'),
+        output_format: z.string().optional().describe('As for vicsee_generate'),
+        audio: z.boolean().optional().describe('As for vicsee_generate'),
+        nsfw_checker: z.boolean().optional().describe('As for vicsee_generate'),
+        extra: z.record(z.unknown()).optional().describe('Any additional model-specific params, as for vicsee_generate'),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    ({ model, extra, ...rest }) =>
+      tool(async () => {
+        const input: Record<string, unknown> = { ...(extra ?? {}) };
+        for (const [k, v] of Object.entries(rest)) {
+          if (v !== undefined) input[k] = v;
+        }
+        return client.estimate({ model, input });
+      }),
+  );
+
+  // -------------------------------------------------------------------------
   // vicsee_generate — create a generation task (async: then poll vicsee_get_task)
   // -------------------------------------------------------------------------
   server.registerTool(
@@ -117,7 +155,7 @@ export function registerCoreTools(
     {
       title: 'Generate image or video',
       description:
-        'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-5-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … For native 2K output at the best value per second use the "minimax-h3-*" models (MiniMax H3, also called Hailuo 03): 4-15s, 768P/2K, always-on stereo audio, billed per second (25 credits/s at 768P, 40 at 2K). Note "minimax-h3-image-to-video" takes the first frame in image_urls[0] and an optional last frame in image_urls[1], and has NO aspect_ratio parameter — the ratio follows the frames; "minimax-h3-reference-to-video" requires at least one image OR video reference (audio alone is rejected) and accepts at most 5 reference images. For clips longer than 15 seconds use the "seedance-2-5-*" models, which generate up to 30 seconds (480p/720p only, no 1080p or 4K); the "seedance-2-0-*" models cap at 15 seconds but add 1080p and 4K. Note that supplying a video reference switches billing to per-second across input + output, so a long reference clip costs considerably more than the duration table suggests — check credits in vicsee_list_models before generating. IMAGE inputs (image_urls, reference_image_urls) may be ' +
+        'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-5-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … For native 2K output at the best value per second use the "minimax-h3-*" models (MiniMax H3, also called Hailuo 03): 4-15s, 768P/2K, always-on stereo audio, billed per second (25 credits/s at 768P, 40 at 2K). Note "minimax-h3-image-to-video" takes the first frame in image_urls[0] and an optional last frame in image_urls[1], and has NO aspect_ratio parameter — the ratio follows the frames; "minimax-h3-reference-to-video" requires at least one image OR video reference (audio alone is rejected) and accepts at most 5 reference images. For clips longer than 15 seconds use the "seedance-2-5-*" models, which generate up to 30 seconds (480p/720p only, no 1080p or 4K); the "seedance-2-0-*" models cap at 15 seconds but add 1080p and 4K. Note that supplying a video reference switches billing to per-second across input + output, so a long reference clip costs considerably more than the duration table suggests. When cost matters, call vicsee_estimate with the same arguments FIRST — it returns the exact credits this call will charge and creates nothing. IMAGE inputs (image_urls, reference_image_urls) may be ' +
         imageSourceHelp +
         '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs. For video-edit models (e.g. "happyhorse-video-edit"), pass the source clip in video_url and optionally set audio_setting ("auto" or "origin"). Input images must have an aspect ratio between 0.4 and 2.5 (width÷height) and at most 36MP — wide-strip composites (e.g. 3:1) are rejected; use a 2×2 grid layout instead. On "failed" tasks, read error.key and error.message from vicsee_get_task — they state the actual reason (do not guess).',
       inputSchema: {

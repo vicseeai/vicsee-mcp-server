@@ -108,6 +108,11 @@ export class VicSeeClient {
     return (json?.data ?? json) as T;
   }
 
+  /** POST /estimate — same body as generate; returns { estimate: true, credits, variant, billableSeconds?, resolvedParams, creditsRemaining, sufficient, note } and creates nothing (VicSee #313). */
+  estimate(payload: { model: string; input: Record<string, unknown> }) {
+    return this.request('POST', '/estimate', { body: payload });
+  }
+
   /** POST /generate — create a generation task. Returns { id, model, status, creditsUsed, creditsRemaining, createdAt }. */
   generate(payload: { model: string; input: Record<string, unknown> }) {
     return this.request('POST', '/generate', { body: payload });
