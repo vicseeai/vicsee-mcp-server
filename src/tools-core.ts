@@ -66,7 +66,7 @@ function assertHostedImageInputs(rest: {
     if (bad.length) {
       throw new VicSeeError(
         'LOCAL_FILE_UNSUPPORTED',
-        `${field} must be public https URLs or base64 data: URIs — this hosted connector can't read local files. Got: ${bad.join(', ')}. Host the image at a public URL (one that opens with no login), or use the @vicsee/mcp-server npm package, which uploads local files for you.`,
+        `${field} must be public https URLs — this hosted connector can't read local files or conversation attachments. Got: ${bad.join(', ')}. Host the image at a public URL (one that opens with no login), or use the @vicsee/mcp-server npm package, which uploads local files for you.`,
         400,
       );
     }
@@ -86,9 +86,15 @@ export function registerCoreTools(
   // Worker, image inputs must already be public URLs / data: URIs — reflect that in
   // the tool descriptions so agents don't try (and silently fail with) local paths.
   const localFiles = !!opts.resolveImages;
+  // VicSee #303: this used to offer "a base64 data URI" as a co-equal option on both branches.
+  // On the hosted connector that reads as permission to convert an image the user attached to
+  // the chat — Claude starts emitting megabytes of base64 as tool arguments and never finishes,
+  // and nothing reaches this Worker, so no error can fire (live repro 2026-09-06). Say plainly
+  // that an attachment cannot be used. On stdio, inline base64 gets truncated in tool-call
+  // output and rejected past a few tens of KB; vicsee_upload is the path that works.
   const imageSourceHelp = localFiles
-    ? 'a public https URL, a local file path (this server reads and base64-encodes it for you), or a base64 data URI'
-    : "a public https URL or a base64 data URI (this hosted connector can't read local files — host the image at a public URL, or use the @vicsee/mcp-server npm package, which uploads local files for you)";
+    ? 'a public https URL, or a local file path (prefer vicsee_upload for anything larger than a thumbnail — inline base64 gets truncated in tool-call output and rejected)'
+    : "a public https URL only. An image attached to this conversation cannot be used — this connector has no access to its bytes, and trying to base64-encode it will hang the request. Ask the user for a public URL that opens with no login, or point them to the @vicsee/mcp-server npm package, which uploads local files";
   // -------------------------------------------------------------------------
   // vicsee_list_models — discover what's available (public, no key needed)
   // -------------------------------------------------------------------------
@@ -155,7 +161,7 @@ export function registerCoreTools(
     {
       title: 'Generate image or video',
       description:
-        'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-5-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … For native 2K output at the best value per second use the "minimax-h3-*" models (MiniMax H3, also called Hailuo 03): 4-15s, 768P/2K, always-on stereo audio, billed per second (25 credits/s at 768P, 40 at 2K). Note "minimax-h3-image-to-video" takes the first frame in image_urls[0] and an optional last frame in image_urls[1], and has NO aspect_ratio parameter — the ratio follows the frames; "minimax-h3-reference-to-video" requires at least one image OR video reference (audio alone is rejected) and accepts at most 5 reference images. For clips longer than 15 seconds use the "seedance-2-5-*" models, which generate up to 30 seconds (480p/720p only, no 1080p or 4K); the "seedance-2-0-*" models cap at 15 seconds but add 1080p and 4K. Note that supplying a video reference switches billing to per-second across input + output, so a long reference clip costs considerably more than the duration table suggests. When cost matters, call vicsee_estimate with the same arguments FIRST — it returns the exact credits this call will charge and creates nothing. IMAGE inputs (image_urls, reference_image_urls) may be ' +
+        'Create an AI image or video with VicSee. Generation is ASYNCHRONOUS: this returns a task `id` immediately, then poll `vicsee_get_task` with that id until status is "completed" (the result URL appears in result.url) or "failed". Use vicsee_list_models to pick a `model` and see its valid options. For image-to-video / image-to-image, pass source images in `image_urls`. For reference-to-video models (e.g. "seedance-2-5-reference-to-video"), pass references in reference_image_urls / reference_video_urls / reference_audio_urls and refer to them positionally in the prompt as @Image1, @Image2, … For native 2K output at the best value per second use the "minimax-h3-*" models (MiniMax H3, also called Hailuo 03): 4-15s, 768P/2K, always-on stereo audio, billed per second (25 credits/s at 768P, 40 at 2K). Note "minimax-h3-image-to-video" takes the first frame in image_urls[0] and an optional last frame in image_urls[1], and has NO aspect_ratio parameter — the ratio follows the frames; "minimax-h3-reference-to-video" requires at least one image OR video reference (audio alone is rejected) and accepts at most 5 reference images. For clips longer than 15 seconds use the "seedance-2-5-*" models, which generate up to 30 seconds (480p/720p only, no 1080p or 4K); the "seedance-2-0-*" models cap at 15 seconds but add 1080p and 4K. Note that supplying a video reference switches billing to per-second across input + output, so a long reference clip costs considerably more than the duration table suggests. When cost matters, call vicsee_estimate with the same arguments FIRST — it returns the exact credits this call will charge and creates nothing. IMAGE inputs (image_urls, reference_image_urls) must be ' +
         imageSourceHelp +
         '. VIDEO/AUDIO inputs (reference_video_urls, reference_audio_urls) must be public https URLs. For video-edit models (e.g. "happyhorse-video-edit"), pass the source clip in video_url and optionally set audio_setting ("auto" or "origin"). Input images must have an aspect ratio between 0.4 and 2.5 (width÷height) and at most 36MP — wide-strip composites (e.g. 3:1) are rejected; use a 2×2 grid layout instead. On "failed" tasks, read error.key and error.message from vicsee_get_task — they state the actual reason (do not guess).',
       inputSchema: {
